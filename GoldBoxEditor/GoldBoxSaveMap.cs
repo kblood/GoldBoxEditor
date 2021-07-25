@@ -40,7 +40,8 @@ namespace GoldBoxEditor
         public int original_charisma           {get;set;}
         public int strengthExpanded             {get;set;}
         public int original_strengthExpanded    {get;set;}
-        public int experience                   {get;set;}
+        public bool bigEndian                   {get;set;}
+        public int experience                   {get;set; }
         public int experienceMax                {get;set;}
         public int experienceAward              {get;set;}
         public int steel                        {get;set; }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using GoldBoxEditor.Services;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -15,13 +16,52 @@ namespace GoldBoxEditor
     {
         GoldBoxCharacter loadedCharacter;
 
+        List<string> Systems { get; set; }
+        List<string> Games { get; set; }
+        List<GoldBoxItemMap> Items { get; set; }
+        List<GoldBoxEffectMap> Effects { get; set; }
+        string SelectedSystem { get; set; }
+        string SelectedGame { get; set; }
+        GoldBoxItemMap SelectedItem { get; set; }
+        GoldBoxEffectMap SelectedEffect { get; set; }
+
         public Form1()
         {
             InitializeComponent();
 
+            GoldBoxData data = Filehandler.LoadGoldBoxData();
+
             List<string> items = new List<string>() {"Int16","Int32","Number","Text","Byte"};
 
             comboBox.Items.AddRange(items.ToArray());
+
+            Systems = new List<string>() { "Amiga", "DOS", "C64" };
+            if (data.Systems != null && data.Systems.Any())
+                Systems = data.Systems;
+
+            ComboBoxSystem.Items.AddRange(Systems.ToArray());
+
+            Games = new List<string>() { "Champions of Krynn","Death Knights of Krynn","Dark Queen of Krynn"};
+
+            if (data.Games != null && data.Games.Any())
+                Games = data.Games;
+
+            comboBoxGame.Items.AddRange(Games.ToArray());
+
+            items = new List<string>() { "System", "Game", "Item", "Effect" };
+            DataTypeComboBox.Items.AddRange(items.ToArray());
+
+            if (data.ItemMaps != null && data.ItemMaps.Any())
+            {
+                Items = data.ItemMaps;
+                ItemComboBox.Items.AddRange(Items.Select(i => i.ItemName).ToArray());
+            }
+
+            if (data.EffectMaps != null && data.EffectMaps.Any())
+            {
+                Effects = data.EffectMaps;
+                EffectComboBox.Items.AddRange(Effects.Select(i => i.EffectName).ToArray());
+            }
         }
 
         private void loadToolStripMenuItem_Click(object sender, EventArgs e)
@@ -53,16 +93,46 @@ namespace GoldBoxEditor
 
                 var attributes = GoldBoxUtility.FindAttributes(bytes);
 
-                var character= 
-                      attributes.First() == 112 ? GoldBoxUtility.LoadCharacter(bytes, GameMaps.getDQK_Amiga_Map())
-                    : attributes.First() == 120 ? GoldBoxUtility.LoadCharacter(bytes, GameMaps.getDQK_DOS_Map()) 
-                    : GoldBoxUtility.LoadCharacter(bytes, GameMaps.getDQK_DOS_Map());
+                GoldBoxSaveMap map = GameMaps.getDQK_DOS_Map();
+                string gametype = "DOS;Dark Queen of Krynn";
 
-                
+                if (attributes.First() == 112)
+                {
+                    map = GameMaps.getDQK_Amiga_Map();
+                    gametype = "Amiga;Dark Queen of Krynn";
+                    ComboBoxSystem.SelectedItem = "Amiga";
+                    comboBoxGame.SelectedItem = "Dark Queen of Krynn";
+                }
+                if (attributes.First() == 120)
+                {
+                    map = GameMaps.getDQK_DOS_Map();
+                    gametype = "DOS;Dark Queen of Krynn";
+                    ComboBoxSystem.SelectedItem = "DOS";
+                    comboBoxGame.SelectedItem = "Dark Queen of Krynn";
+                }
+
+                var character = GoldBoxUtility.LoadCharacter(bytes, map);
+
                 ValuesTextBox.Text = GenericsHelper.GetNamesAndValuesAsString(typeof(GoldBoxCharacter), character).Select(vals => $"{vals.Key}: {vals.Value}").Aggregate((a, b) => $"{a}{Environment.NewLine}{b}");
+                var temp = BitConverter.ToInt16(bytes.Skip(map.equippedWeaponAddress).Take(4).ToArray(),0);
+                var temp2 = BitConverter.ToInt16(bytes.Skip(map.equippedShieldAddress).Take(4).ToArray(),0);
+
+                ValuesTextBox.Text += Environment.NewLine + "Name data: " + BitConverter.ToString(bytes.Skip(map.name).Take(17).ToArray()).Replace("-", "");
+                ValuesTextBox.Text += Environment.NewLine + gametype;
+                ValuesTextBox.Text += Environment.NewLine + "Known spells data: " + BitConverter.ToString(bytes.Skip(map.knownSpells).Take(map.knownSpellsByteLength).ToArray()).Replace("-", "");
+                //ValuesTextBox.Text += Environment.NewLine + "Equipped Weapon Address value: " + temp;
+                //ValuesTextBox.Text += Environment.NewLine + "Equipped Weapon data: " + BitConverter.ToString(character.itemsAndEffects.Skip(temp).Take(map.itemByteLength).ToArray() ).Replace("-", "");
+                //ValuesTextBox.Text += Environment.NewLine + "Equipped Shield Address value: " + temp2;
+                //ValuesTextBox.Text += Environment.NewLine + "Equipped Shield data: " + BitConverter.ToString(character.itemsAndEffects.Skip(temp2).Take(map.itemByteLength).ToArray()).Replace("-", "");
                 ValuesTextBox.Text += Environment.NewLine + "File: " + ByteArrayToString(character.itemsAndEffects);
 
                 loadedCharacter = character;
+                List<string> charItems = character.items.Select(i => BitConverter.ToString(i).Replace("-", "")).ToList();
+                ItemCodeComboBox.Items.Clear();
+                ItemCodeComboBox.Items.AddRange(charItems.ToArray());
+                List<string> charEffects = character.effects.Select(x => BitConverter.ToString(x).Replace("-", "")).ToList();
+                EffectCodeComboBox.Items.Clear();
+                EffectCodeComboBox.Items.AddRange(charEffects.ToArray());
             }
         }
 
@@ -105,11 +175,13 @@ namespace GoldBoxEditor
 
             try
             {
-                var result = GoldBoxUtility.FindValue(bytes, SearchText.Text);
-                if (result.Any())
-                    AsciiTextBox.Text = result.Select(vals => $"{vals.Key}: {vals.Value}").Aggregate((a, b) => $"{a}{Environment.NewLine}{b}");
-                else
-                    AsciiTextBox.Text = "No matches found";
+                //var result = GoldBoxUtility.FindValue(bytes, SearchText.Text);
+                //if (result.Any())
+                //    AsciiTextBox.Text = result.Select(vals => $"{vals.Key}: {vals.Value}").Aggregate((a, b) => $"{a}{Environment.NewLine}{b}");
+                //else
+                //    AsciiTextBox.Text = "No matches found";
+                AsciiTextBox.Text = "";
+                AsciiTextBox.Text += GoldBoxUtility.FindValue2(bytes, SearchText.Text);
             }
             catch { }
         }
@@ -162,7 +234,9 @@ namespace GoldBoxEditor
                     : GoldBoxUtility.LoadCharacter(bytes2, GameMaps.getDQK_DOS_Map());
 
 
+
                 Values2TextBox.Text = GenericsHelper.GetNamesAndValuesAsString(typeof(GoldBoxCharacter), character).Select(vals => $"{vals.Key}: {vals.Value}").Aggregate((a, b) => $"{a}{Environment.NewLine}{b}");
+
                 Values2TextBox.Text += Environment.NewLine + "File: " + ByteArrayToString(character.itemsAndEffects);
 
                 var comparison = GoldBoxUtility.CompareFiles(bytes, bytes2);
@@ -187,9 +261,9 @@ namespace GoldBoxEditor
 
                 CheckFileExists = false,
                 CheckPathExists = true,
-
-                DefaultExt = "qch",
-                Filter = "qch files (*.qch)|*.qch",
+                FileName = Path.GetFileNameWithoutExtension(FileLabel.Text).ToUpper(),
+                DefaultExt = "QCH",
+                Filter = "QCH files (*.QCH)|*.QCH",
                 FilterIndex = 2,
                 RestoreDirectory = true,
             };
@@ -200,17 +274,17 @@ namespace GoldBoxEditor
             {
                 GoldBoxCharacter character = loadedCharacter;
 
-                character.name = Path.GetFileNameWithoutExtension(saveFileDialog.FileName);
-                character.strength = character.original_strength;
-                character.constitution = character.original_constitution;
-                character.movementCurrent = character.movementBase;
-                character.acCurrent = character.acBase;
-                character.thac0Current = character.thac0base;
-                character.encumberance = 0;
+                //character.name = Path.GetFileNameWithoutExtension(saveFileDialog.FileName);
+                //character.strength = character.original_strength;
+                //character.constitution = character.original_constitution;
+                //character.movementCurrent = character.movementBase;
+                //character.acCurrent = character.acBase;
+                //character.thac0Current = character.thac0base;
+                //character.encumberance = 0;
                 character.handsEquipped = 0;
                 character.hostile = 0;
                 //character.npc = 0;
-                character.numberOfItems = 0;
+                //character.numberOfItems = 0;
                 
                 //character.hitpointsCurrent = character.hitpointsRolled;
 
@@ -234,6 +308,148 @@ namespace GoldBoxEditor
 
             //loadedCharacter = character;
 
+        }
+
+        private void AddButton_Click(object sender, EventArgs e)
+        {
+            //{ "System", "Game", "Item", "Effect" };
+            
+            string newName = AddTextBox.Text;
+            if(DataTypeComboBox.SelectedItem == "System")
+            {
+                Systems.Add(newName);
+                ComboBoxSystem.Items.Add(newName);
+            }
+            if (DataTypeComboBox.SelectedItem == "Game")
+            {
+                Games.Add(newName);
+                comboBoxGame.Items.Add(newName);
+            }
+            if (DataTypeComboBox.SelectedItem == "Item")
+            {
+                var item = new GoldBoxItemMap(newName);
+                if (Items == null)
+                    Items = new List<GoldBoxItemMap>();
+                Items.Add(item);
+                ItemComboBox.Items.Add(newName);
+            }
+            if (DataTypeComboBox.SelectedItem == "Effect")
+            {
+                var effect = new GoldBoxEffectMap(newName);
+                if (Effects == null)
+                    Effects = new List<GoldBoxEffectMap>();
+                Effects.Add(effect);
+                EffectComboBox.Items.Add(newName);
+            }
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            var data = new GoldBoxData() 
+            {
+                Systems = Systems,
+                Games = Games,
+                ItemMaps = Items,
+                EffectMaps = Effects
+            };
+
+            Filehandler.SaveGoldBoxData(data);
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            GoldBoxData data = Filehandler.LoadGoldBoxData();
+
+            List<string> items = new List<string>() {"Int16","Int32","Number","Text","Byte"};
+
+            comboBox.Items.AddRange(items.ToArray());
+
+            Systems = new List<string>() { "Amiga", "DOS", "C64" };
+            if (data.Systems != null && data.Systems.Any())
+                Systems = data.Systems;
+            ComboBoxSystem.Items.Clear();
+            ComboBoxSystem.Items.AddRange(items.ToArray());
+
+            Games = new List<string>() { "Champions of Krynn", "Death Knights of Krynn", "Dark Queen of Krynn" };
+
+            if (data.Games != null && data.Games.Any())
+                Games = data.Games;
+
+            comboBoxGame.Items.Clear();
+            comboBoxGame.Items.AddRange(items.ToArray());
+
+            items = new List<string>() { "System", "Game", "Item", "Effect" };
+            DataTypeComboBox.Items.Clear();
+            DataTypeComboBox.Items.AddRange(items.ToArray());
+
+            if (data.ItemMaps != null && data.ItemMaps.Any())
+            {
+                Items = data.ItemMaps;
+                ItemComboBox.Items.Clear();
+                ItemComboBox.Items.AddRange(Items.Select(i => i.ItemName).ToArray());
+            }
+
+            if (data.EffectMaps != null && data.EffectMaps.Any())
+            {
+                Effects = data.EffectMaps;
+                EffectComboBox.Items.Clear();
+                EffectComboBox.Items.AddRange(Effects.Select(i => i.EffectName).ToArray());
+            }
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            GoldBoxItemMap item = Items.Where(i => i.ItemName == ItemComboBox.SelectedItem.ToString()).FirstOrDefault();
+
+            byte[] itemBytes = loadedCharacter.items[ItemCodeComboBox.SelectedIndex];
+
+            string code = ItemCodeComboBox.SelectedItem.ToString();
+            string key = ComboBoxSystem.SelectedItem.ToString() + ";" + comboBoxGame.SelectedItem.ToString();
+
+            if (item.GameItemcodePairs.ContainsKey(key))
+                item.GameItemcodePairs.Remove(key);
+            item.GameItemcodePairs.Add(key, code);
+
+            if (item.GameItembytesPairs == null)
+                item.GameItembytesPairs = new Dictionary<string, byte[]>();
+
+            if (item.GameItembytesPairs.ContainsKey(key))
+                item.GameItembytesPairs.Remove(key);
+            item.GameItembytesPairs.Add(key, itemBytes);
+        }
+        private void AddEffectCodeButton_Click(object sender, EventArgs e)
+        {
+            GoldBoxEffectMap effect = Effects.Where(i => i.EffectName == EffectComboBox.SelectedItem.ToString()).FirstOrDefault();
+
+            byte[] effectBytes = loadedCharacter.effects[EffectCodeComboBox.SelectedIndex];
+
+            string code = EffectCodeComboBox.SelectedItem.ToString();
+
+            effect.GameEffectcodePairs.Add(ComboBoxSystem.SelectedItem.ToString() + ";" + comboBoxGame.SelectedItem.ToString(), code);
+            effect.GameEffectbytesPairs.Add(ComboBoxSystem.SelectedItem.ToString() + ";" + comboBoxGame.SelectedItem.ToString(), effectBytes);
+        }
+
+        private void ItemComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            GoldBoxItemMap item = Items.Where(i => i.ItemName == ItemComboBox.SelectedItem.ToString()).FirstOrDefault();
+
+            AsciiTextBox.Text = $"Item name: {item.ItemName}";
+            foreach(var pair in item.GameItemcodePairs)
+                AsciiTextBox.Text += Environment.NewLine + $"Game: {pair.Key} Code: {pair.Value}";
+        }
+
+        private void deleteItembutton_Click(object sender, EventArgs e)
+        {
+            GoldBoxItemMap item = Items.Where(i => i.ItemName == ItemComboBox.SelectedItem.ToString()).FirstOrDefault();
+            ItemComboBox.Items.Remove(ItemComboBox.SelectedItem);
+            Items.Remove(item);
+        }
+
+        private void deleteEffectbutton_Click(object sender, EventArgs e)
+        {
+            GoldBoxEffectMap effect = Effects.Where(i => i.EffectName == EffectComboBox.SelectedItem.ToString()).FirstOrDefault();
+            EffectComboBox.Items.Remove(EffectComboBox.SelectedItem);
+            Effects.Remove(effect);
         }
     }
 }

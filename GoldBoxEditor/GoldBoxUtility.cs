@@ -68,6 +68,107 @@ namespace GoldBoxEditor
             return attributes;
         }
 
+        static public Int16 ReverseToInt16(byte[] bytes, int offset)
+        {
+            return BitConverter.ToInt16(bytes.Skip(offset).Take(2).Reverse().ToArray(), 0);
+        }
+
+        static public Int16 ToUInt16(byte[] bytes, int offset, bool reversed = true)
+        {
+            if (reversed)
+                return (Int16)BitConverter.ToUInt16(bytes.Skip(offset).Take(2).Reverse().ToArray(), 0);
+            else
+                return (Int16)BitConverter.ToUInt16(bytes, offset);
+        }
+
+        static public int ReverseToInt32(byte[] bytes, int offset)
+        {
+            return BitConverter.ToInt32(bytes.Skip(offset).Take(4).Reverse().ToArray(), 0);
+        }
+
+        static public UInt32 ToUInt32(byte[] bytes, int offset, bool reversed = true)
+        {
+            if (reversed)
+                return BitConverter.ToUInt32(bytes.Skip(offset).Take(4).Reverse().ToArray(), 0);
+            else
+                return BitConverter.ToUInt32(bytes,offset);
+        }
+
+        static public string FindValue2(byte[] bytes, string value)
+        {
+            //Dictionary<int, string> values = new Dictionary<int, string>();
+
+            string values = "";
+
+            float number = -1;
+            //int j = 0;
+            if (value.Contains(","))
+            {
+                var variables = value.Split(',').Select(n => int.Parse(n)).ToList();
+                var sequence = FindSequence(bytes, variables);
+                if (sequence.Any())
+                    return sequence.Select(s => s.ToString()).Aggregate((a, b) => "Byte: "+a +", "+ "Byte: "+b).ToString(); 
+                        //sequence.ToDictionary(d => d, d => "Byte: " + bytes[d]);
+            }
+            else
+                for (int i = 0; i < bytes.Count(); i++)
+                {
+                    if (float.TryParse(value, out number))
+                    {
+                        double currentValue = -1;
+                        if (bytes.Length >= i + 16)
+                            currentValue = BitConverter.ToDouble(bytes, i);
+                        if (currentValue == number)
+                        {
+                            values += $"Offset:{i} - Double: {value}" + Environment.NewLine;
+                        }
+                        if (bytes.Length >= i + 8)
+                            currentValue = BitConverter.ToSingle(bytes, i);
+                        if (currentValue == number)
+                        {
+                            values += $"Offset:{i} - Float: {value}" + Environment.NewLine;
+                        }
+                        if (bytes.Length >= i + 4)
+                        {
+                            if (BitConverter.ToUInt32(bytes, i) == number)
+                                values += $"Offset:{i} - UInt32: {value}" + Environment.NewLine;
+                            if (BitConverter.ToInt32(bytes, i) == number)
+                                values += $"Offset:{i} - Int32: {value}" + Environment.NewLine;
+                            if (ToUInt32(bytes, i) == number)
+                                values += $"Offset:{i} - Reversed UInt32: {value}" + Environment.NewLine;
+                        }
+                        if (bytes.Length >= i + 2)
+                        {
+                            if (BitConverter.ToInt16(bytes, i) == number)
+                                values += $"Offset:{i} - Int16: {value}" + Environment.NewLine;
+                            if (BitConverter.ToUInt16(bytes, i) == number)
+                                values += $"Offset:{i} - UInt16: {value}" + Environment.NewLine;
+                            if (ReverseToInt16(bytes, i) == number)
+                                values += $"Offset:{i} - Reverse Int16: {value}" + Environment.NewLine;
+                        }
+                        currentValue = bytes[i];
+                        if (currentValue == number)
+                        {
+                            values += $"Offset:{i} - ByteValue: {value}" + Environment.NewLine;
+                        }
+                        continue;
+                    }
+                    else
+                    {
+                        if (bytes.Length >= i + value.Length)
+                        {
+                            string currentValue=Encoding.ASCII.GetString(bytes.Skip(i).Take(value.Length).ToArray());
+                            if (currentValue.ToLower() == value.ToLower())
+                                values += $"Offset:{i} - Value: {currentValue}" + Environment.NewLine;
+                        }
+                    }
+                }
+            if (values.Any())
+                return values;
+            else
+                return "No matches found";
+        }
+
         static public Dictionary<int, string> FindValue(byte[] bytes, string value)
         {
             Dictionary<int, string> values = new Dictionary<int, string>();
@@ -86,12 +187,26 @@ namespace GoldBoxEditor
             {
                 if(float.TryParse(value, out number))
                 {
-                    float currentValue = -1;
+                    double currentValue = -1;
+                    if (bytes.Length >= i + 16)
+                        currentValue = BitConverter.ToDouble(bytes, i);
+                    if (currentValue == number)
+                    {
+                        values.Add(i, "Double: " + value);
+                        continue;
+                    }
                     if (bytes.Length >= i + 8)
-                        currentValue = BitConverter.ToSingle(bytes, i);
+                    currentValue = BitConverter.ToSingle(bytes, i);
                     if (currentValue == number)
                     {
                         values.Add(i, "Float: " + value);
+                        continue;
+                    }
+                    if (bytes.Length >= i + 4)
+                        currentValue = BitConverter.ToUInt32(bytes, i);
+                    if (currentValue == number)
+                    {
+                        values.Add(i, "UInt32: " + value);
                         continue;
                     }
                     if (bytes.Length >= i + 4)
@@ -101,6 +216,7 @@ namespace GoldBoxEditor
                         values.Add(i, "Int32: " + value);
                         continue;
                     }
+
                     if (bytes.Length >= i + 2)
                         currentValue = BitConverter.ToInt16(bytes, i);
                     if (currentValue == number)
@@ -108,6 +224,13 @@ namespace GoldBoxEditor
                         values.Add(i, "Int16: " + value);
                         continue;
                     }
+                    if (bytes.Length >= i + 2)
+                        currentValue = BitConverter.ToUInt16(bytes, i);
+                    if (currentValue == number)
+                    {
+                        values.Add(i, "UInt16: " + value);
+                            continue;
+                        }
                     currentValue = bytes[i];
                     if (currentValue == number)
                     {
@@ -165,14 +288,15 @@ namespace GoldBoxEditor
                 original_charisma           =       characterFile[fileMap.original_charisma],
                 strengthExpanded            =       characterFile[fileMap.strengthExpanded],
                 original_strengthExpanded   =       characterFile[fileMap.original_strengthExpanded],
-                experience                  =       BitConverter.ToInt32(characterFile,fileMap.experience),
-                experienceMax               =       BitConverter.ToInt32(characterFile,fileMap.experienceMax),
-                experienceAward             =       BitConverter.ToInt16(characterFile,fileMap.experienceMax),
+                experience                  =       ToUInt32(characterFile,fileMap.experience,fileMap.bigEndian),
+                experienceMax               =       ToUInt32(characterFile,fileMap.experienceMax, fileMap.bigEndian),
+                experienceAward             =       ToUInt16(characterFile,fileMap.experienceAward, fileMap.bigEndian),
+                //BitConverter.ToInt16(characterFile,fileMap.experienceMax),
                 steel                       =       BitConverter.ToInt16(characterFile,fileMap.steel),
                 gems                        =       BitConverter.ToInt16(characterFile,fileMap.gems),
                 jewelery                    =       BitConverter.ToInt16(characterFile,fileMap.jewelery),
                 age                         =       BitConverter.ToInt16(characterFile,fileMap.age),
-                encumberance                =       BitConverter.ToInt16(characterFile,fileMap.encumberance),
+                encumberance                =       ToUInt16(characterFile,fileMap.encumberance, fileMap.bigEndian),
                 race                        =       characterFile[fileMap.race],
                 char_class                  =       characterFile[fileMap.char_class],
                 gender                      =       characterFile[fileMap.gender],
@@ -314,6 +438,27 @@ namespace GoldBoxEditor
             character.effects = new List<byte[]>();
             for (int i = 0; i < numberOfEffects; i++)
                 character.effects.Add(effects.Skip(i*fileMap.effectByteLength).Take(fileMap.effectByteLength).ToArray());
+
+            // Unequip all items
+            //foreach (var item in character.items)
+            //{
+            //    item[10] = 0;
+            //}
+
+            // Byteswap if Amiga save file
+            if (fileMap.bigEndian)
+            {
+                foreach(var item in character.items)
+                {
+                    // Byteswap item weight and value
+                    byte[] newItem = item.Take(17).ToArray();
+                    item[4] = newItem[5];
+                    item[5] = newItem[4];
+                    item[6] = newItem[7];
+                    item[7] = newItem[6];
+                }
+                character.items = character.items.Select(i => i.Take(17).ToArray()).ToList();
+            }
 
             //DOS Bytes 414-431 = first item. Item = 18 bytes? Amiga bytes 416-433 = first item. Items size 18 bytes
             //423-431  Effect = 10 bytes? Amiga DQK effect = 10 bytes. DOS DQK effect = 9 bytes
@@ -469,7 +614,7 @@ namespace GoldBoxEditor
             characterBytes.RemoveAt(fileMap.unarmedModifier    ); characterBytes.Insert(fileMap.unarmedModifier    , character.unarmedModifier    );
             characterBytes.RemoveAt(fileMap.unarmedModifier2   ); characterBytes.Insert(fileMap.unarmedModifier2   , character.unarmedModifier2   );
             characterBytes.RemoveAt(fileMap.itemLimits         ); characterBytes.Insert(fileMap.itemLimits         , character.itemLimits         );
-            //characterBytes.RemoveAt(fileMap.numberOfItems      ); characterBytes.Insert(fileMap.numberOfItems      , character.numberOfItems      );
+            characterBytes.RemoveAt(fileMap.numberOfItems      ); characterBytes.Insert(fileMap.numberOfItems      , character.numberOfItems      );
             characterBytes.RemoveAt(fileMap.flags1             ); characterBytes.Insert(fileMap.flags1             , character.flags1             );
             characterBytes.RemoveAt(fileMap.flags2             ); characterBytes.Insert(fileMap.flags2             , character.flags2             );
             characterBytes.RemoveAt(fileMap.saveBonus          ); characterBytes.Insert(fileMap.saveBonus          , character.saveBonus          );
@@ -484,15 +629,17 @@ namespace GoldBoxEditor
             characterBytes.RemoveAt(fileMap.druidSpells1       ); characterBytes.Insert(fileMap.druidSpells1       , character.druidSpells1       );
             characterBytes.RemoveAt(fileMap.druidSpells2       ); characterBytes.Insert(fileMap.druidSpells2       , character.druidSpells2       );
             characterBytes.RemoveAt(fileMap.druidSpells3       ); characterBytes.Insert(fileMap.druidSpells3       , character.druidSpells3       );
-            characterBytes.RemoveAt(fileMap.mageSpells1        ); characterBytes.Insert(fileMap.mageSpells1        , character.mageSpells1        );
-            characterBytes.RemoveAt(fileMap.mageSpells2        ); characterBytes.Insert(fileMap.mageSpells2        , character.mageSpells2        );
-            characterBytes.RemoveAt(fileMap.mageSpells3        ); characterBytes.Insert(fileMap.mageSpells3        , character.mageSpells3        );
-            characterBytes.RemoveAt(fileMap.mageSpells4        ); characterBytes.Insert(fileMap.mageSpells4        , character.mageSpells4        );
-            characterBytes.RemoveAt(fileMap.mageSpells5        ); characterBytes.Insert(fileMap.mageSpells5        , character.mageSpells5        );
-            characterBytes.RemoveAt(fileMap.mageSpells6        ); characterBytes.Insert(fileMap.mageSpells6        , character.mageSpells6        );
-            characterBytes.RemoveAt(fileMap.mageSpells7        ); characterBytes.Insert(fileMap.mageSpells7        , character.mageSpells7        );
-            characterBytes.RemoveAt(fileMap.mageSpells8        ); characterBytes.Insert(fileMap.mageSpells8        , character.mageSpells8        );
-            characterBytes.RemoveAt(fileMap.mageSpells9        ); characterBytes.Insert(fileMap.mageSpells9        , character.mageSpells9        );
+
+            characterBytes.RemoveAt(fileMap.mageSpells1); characterBytes.Insert(fileMap.mageSpells1, character.mageSpells1);
+            characterBytes.RemoveAt(fileMap.mageSpells2); characterBytes.Insert(fileMap.mageSpells2, character.mageSpells2);
+            characterBytes.RemoveAt(fileMap.mageSpells3); characterBytes.Insert(fileMap.mageSpells3, character.mageSpells3);
+            characterBytes.RemoveAt(fileMap.mageSpells4); characterBytes.Insert(fileMap.mageSpells4, character.mageSpells4);
+            characterBytes.RemoveAt(fileMap.mageSpells5); characterBytes.Insert(fileMap.mageSpells5, character.mageSpells5);
+            characterBytes.RemoveAt(fileMap.mageSpells6); characterBytes.Insert(fileMap.mageSpells6, character.mageSpells6);
+            characterBytes.RemoveAt(fileMap.mageSpells7); characterBytes.Insert(fileMap.mageSpells7, character.mageSpells7);
+            characterBytes.RemoveAt(fileMap.mageSpells8); characterBytes.Insert(fileMap.mageSpells8, character.mageSpells8);
+            characterBytes.RemoveAt(fileMap.mageSpells9); characterBytes.Insert(fileMap.mageSpells9, character.mageSpells9);
+
             characterBytes.RemoveAt(fileMap.levelUndead        ); characterBytes.Insert(fileMap.levelUndead        , character.levelUndead        );
             characterBytes.RemoveAt(fileMap.ableToTrain        ); characterBytes.Insert(fileMap.ableToTrain        , character.ableToTrain        );
             characterBytes.RemoveAt(fileMap.icon               ); characterBytes.Insert(fileMap.icon               , character.icon               );
@@ -514,15 +661,69 @@ namespace GoldBoxEditor
             characterBytes.RemoveAt(fileMap.handsEquipped   ); characterBytes.Insert(fileMap.handsEquipped   , character.handsEquipped   );
             characterBytes.RemoveAt(fileMap.enabled         ); characterBytes.Insert(fileMap.enabled         , character.enabled         );
             characterBytes.RemoveAt(fileMap.hostile         ); characterBytes.Insert(fileMap.hostile         , character.hostile         );
-            characterBytes.RemoveAt(fileMap.quickfight      ); characterBytes.Insert(fileMap.quickfight      , character.quickfight      );
+            
+            //characterBytes.RemoveAt(fileMap.quickfight      ); characterBytes.Insert(fileMap.quickfight      , character.quickfight      );
+
+            characterBytes.RemoveAt(fileMap.god); characterBytes.Insert(fileMap.god, character.god);
+            characterBytes.RemoveAt(fileMap.knight); characterBytes.Insert(fileMap.knight, character.knight);
+
+            characterBytes.RemoveAt(fileMap.robe); characterBytes.Insert(fileMap.robe, character.robe);
+
+            characterBytes.RemoveRange(fileMap.knownSpells, fileMap.knownSpellsByteLength);
+            characterBytes.InsertRange(fileMap.knownSpells, character.knownSpells);
+            characterBytes.RemoveRange(fileMap.memorizedSpells, fileMap.memorizedSpellsByteLength);
+            characterBytes.InsertRange(fileMap.memorizedSpells, character.memorizedSpells);
 
             //DOS Bytes 414-431 = first item. Item = 18 bytes? Amiga bytes 416-433 = first item. Items size 18 bytes
             //423-431  Effect = 10 bytes? Amiga DQK effect = 10 bytes. DOS DQK effect = 9 bytes
 
-            characterBytes.RemoveRange(fileMap.nextCharacterAddress, HexStringToByteArray(character.nextCharacterAddress).Length);
-            characterBytes.InsertRange(fileMap.nextCharacterAddress, HexStringToByteArray(character.nextCharacterAddress));
+            //characterBytes.RemoveRange(fileMap.nextCharacterAddress, HexStringToByteArray(character.nextCharacterAddress).Length);
+            //characterBytes.InsertRange(fileMap.nextCharacterAddress, HexStringToByteArray(character.nextCharacterAddress));
 
-            return characterBytes.Take(414).ToArray();
+            // insert number of items
+            //characterBytes.RemoveRange(fileMap.itemsAddress, 1);
+            //characterBytes.Insert(fileMap.itemsAddress, character.numberOfItems);
+            characterBytes[fileMap.itemsAddress] = character.numberOfItems;
+
+            // Ensure the file ends before the beginning of items and effects:
+            characterBytes = characterBytes.Take(fileMap.itemsAndEffects).ToList();
+            //Add items:
+            foreach (var item in character.items)
+                characterBytes.AddRange(item.ToList());
+
+            // byte 0 = effect type
+            // byte 4 = 255 (Amiga byte 5)
+            // byte 5 = 00 if racial effect 01 if item given effect (Amiga byte 6)
+            // if not the last effect byte 8 and 9 should be 113 and 88
+
+            int inherentEffectByte = 4;
+
+            if (character.effects.Any() && character.effects.First()[4] == 255)
+                inherentEffectByte = 5;
+            else if (character.effects.Any() && character.effects.First()[3] == 255)
+                inherentEffectByte = 4;
+
+            // if any of hte characters effects are racial effects convert them.
+            if (character.effects.Any())// && character.effects.Where(e => e[inherentEffectByte] == 0).Any())
+            {
+                foreach (var effect in character.effects) //.Where(e => e[inherentEffectByte] == 0))
+                {
+                    byte[] newEffect = new byte[9] { effect[0], 0,0,255, effect[inherentEffectByte], 0,0,113,88 };
+                    characterBytes.AddRange(newEffect);
+                }
+                // The last effect should end with 0, 0 instead of 113,88
+                characterBytes[characterBytes.Count() - 1] = 0;
+                characterBytes[characterBytes.Count() - 2] = 0;
+                //characterBytes.RemoveAt(fileMap.effectsAddress); characterBytes.Insert(fileMap.god, character.god);
+
+                // Set the effectsAddress
+                characterBytes[fileMap.effectsAddress + 2] = 113;
+                characterBytes[fileMap.effectsAddress + 3] = 88;
+            }
+
+
+            return characterBytes.ToArray();
+            //return characterBytes.Take(414).ToArray();
         }
 
         //public static List<Byte> Replace(List<Byte> bytes, GoldBoxCharacter character, GoldBoxSaveMap map, string name)
